@@ -6,12 +6,7 @@
     <title>Supabase Media Share</title>
     <!-- Tailwind CSS CDN for easy styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide React for icons - Although this is an HTML file, the instruction specified Lucide for React,
-         I'll include it here to demonstrate the intent for icon usage if this were a React app.
-         For pure HTML, you would typically use SVG directly or a library like Font Awesome.
-         Here, I'll use simple inline SVGs for clarity or text-based icons.
-    -->
-    <!-- Replace with actual icon library if desired, e.g., Font Awesome -->
+    <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body {
@@ -120,8 +115,6 @@
             margin-top: 1.5rem;
         }
     </style>
-    <!-- Supabase client CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center py-8 px-4">
     <div class="container mx-auto p-6 bg-white rounded-lg shadow-xl w-full">
@@ -177,12 +170,13 @@
     </div>
 
     <script type="module">
+        // Import createClient directly from the Supabase ES module CDN
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
         // Supabase client initialization
-        // Replace 'YOUR_SUPABASE_URL' and 'YOUR_SUPABASE_ANON_KEY' with your actual Supabase project details.
-        // These are placeholders as requested.
         const SUPABASE_URL = 'https://zwnpapxgogbhdbruzgzg.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3bnBhcHhnb2diaGRicnV6Z3pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1MTYwNzYsImV4cCI6MjA3MjA5MjA3Nn0.hzp0com6MDGRl8_8rn7SJczKfu-CTM4gvbMZMpAfBJc';
-        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // --- DOM Elements ---
         const mediaFileInput = document.getElementById('media-file-input');
@@ -202,9 +196,6 @@
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
         // --- Global Variables ---
-        // A simple way to track who "owns" an uploaded file in a no-auth scenario.
-        // In a real app, this would be tied to a user session.
-        // For this example, we'll use a unique ID stored in localStorage.
         let localUserId = localStorage.getItem('media_share_user_id');
         if (!localUserId) {
             localUserId = crypto.randomUUID();
@@ -263,10 +254,9 @@
                 return;
             }
 
-            // Generate a unique file name to avoid collisions
             const fileExtension = file.name.split('.').pop();
             const fileName = `${crypto.randomUUID()}.${fileExtension}`;
-            const filePath = `${localUserId}/${fileName}`; // Store in a user-specific folder for easier management
+            const filePath = `${localUserId}/${fileName}`;
 
             uploadBtn.disabled = true;
             uploadStatus.textContent = `Uploading "${file.name}"...`;
@@ -274,37 +264,27 @@
             uploadProgressBar.style.width = '0%';
 
             try {
-                // Upload file to Supabase storage
                 const { data, error } = await supabase.storage
-                    .from('media') // The bucket name is 'media' as specified
+                    .from('media')
                     .upload(filePath, file, {
                         cacheControl: '3600',
                         upsert: false,
-                        // Progress callback is not directly available in the Supabase JS client for browser upload.
-                        // For detailed progress, you'd typically use a different approach or a server-side upload.
-                        // For simplicity, we'll simulate progress or update after completion.
-                        // However, the `upload` method does return data, but not granular progress for browser.
-                        // We'll update the bar to 100% on success.
-                        // A simple solution to show progress for large files would be to make multiple chunks
-                        // but this is out of scope for a simple example.
                     });
 
                 if (error) {
                     throw error;
                 }
 
-                // Get the public URL for the uploaded file
                 const { data: publicUrlData } = supabase.storage
                     .from('media')
                     .getPublicUrl(filePath);
 
                 const publicUrl = publicUrlData.publicUrl;
 
-                // Insert metadata into the 'media' table
                 const { error: dbError } = await supabase
                     .from('media')
                     .insert({
-                        user_id: localUserId, // Associate with the local user ID
+                        user_id: localUserId,
                         file_path: filePath,
                         file_type: file.type,
                         public_url: publicUrl,
@@ -317,8 +297,8 @@
                 uploadProgressBar.style.width = '100%';
                 uploadStatus.textContent = `Upload successful!`;
                 showCustomModal('Success!', `"${file.name}" uploaded successfully!`, false);
-                mediaFileInput.value = ''; // Clear the file input
-                await fetchMedia(); // Refresh the gallery
+                mediaFileInput.value = '';
+                await fetchMedia();
             } catch (error) {
                 console.error('Error uploading file:', error);
                 uploadStatus.textContent = `Upload failed: ${error.message}`;
@@ -326,7 +306,6 @@
                 uploadProgressBar.style.width = '0%';
             } finally {
                 uploadBtn.disabled = false;
-                // Keep progress bar container visible briefly then hide
                 setTimeout(() => {
                     uploadProgressBarContainer.classList.add('hidden');
                     uploadProgressBar.style.width = '0%';
@@ -339,14 +318,13 @@
          */
         async function fetchMedia() {
             loadingSpinner.classList.remove('hidden');
-            mediaGallery.innerHTML = ''; // Clear existing media
+            mediaGallery.innerHTML = '';
 
             try {
-                // Fetch all media metadata from the 'media' table
                 const { data: mediaData, error } = await supabase
                     .from('media')
                     .select('*')
-                    .order('created_at', { ascending: false }); // Show newest first
+                    .order('created_at', { ascending: false });
 
                 if (error) {
                     throw error;
@@ -357,14 +335,13 @@
                     return;
                 }
 
-                noMediaMessage.classList.add('hidden'); // Hide "no media" message if there is data
+                noMediaMessage.classList.add('hidden');
 
                 for (const mediaItem of mediaData) {
-                    // Create media card
                     const mediaCard = document.createElement('div');
                     mediaCard.classList.add('media-card');
-                    mediaCard.dataset.id = mediaItem.id; // Store item ID for actions
-                    mediaCard.dataset.userId = mediaItem.user_id; // Store user ID for delete permissions
+                    mediaCard.dataset.id = mediaItem.id;
+                    mediaCard.dataset.userId = mediaItem.user_id;
 
                     let mediaElement;
                     if (mediaItem.file_type.startsWith('image/')) {
@@ -381,7 +358,7 @@
                         mediaElement.src = mediaItem.public_url;
                         mediaElement.controls = true;
                         mediaElement.autoplay = false;
-                        mediaElement.muted = true; // Mute by default
+                        mediaElement.muted = true;
                         mediaElement.loop = false;
                         mediaElement.classList.add('media-content');
                         mediaElement.onerror = (e) => {
@@ -389,7 +366,6 @@
                             e.target.alt = "Video failed to load";
                         };
                     } else {
-                        // Fallback for unsupported types, display a generic placeholder
                         mediaElement = document.createElement('div');
                         mediaElement.classList.add('media-content', 'flex', 'items-center', 'justify-center', 'bg-gray-200', 'text-gray-500', 'text-sm');
                         mediaElement.textContent = `Unsupported File Type: ${mediaItem.file_type}`;
@@ -397,7 +373,6 @@
 
                     mediaCard.appendChild(mediaElement);
 
-                    // Create action buttons
                     const actionsDiv = document.createElement('div');
                     actionsDiv.classList.add('media-actions');
 
@@ -408,7 +383,6 @@
                     copyBtn.onclick = () => copyToClipboard(mediaItem.public_url);
                     actionsDiv.appendChild(copyBtn);
 
-                    // Only show delete button if the media was uploaded by the current local user ID
                     if (mediaItem.user_id === localUserId) {
                         const deleteBtn = document.createElement('button');
                         deleteBtn.classList.add('btn', 'btn-danger', 'text-sm');
@@ -426,7 +400,7 @@
                 showCustomModal('Error', `Could not load media: ${error.message}`, false);
             } finally {
                 loadingSpinner.classList.add('hidden');
-                if (mediaGallery.children.length === 0) { // Check if after loading, there's still no media
+                if (mediaGallery.children.length === 0) {
                     noMediaMessage.classList.remove('hidden');
                 }
             }
@@ -450,7 +424,6 @@
             }
 
             try {
-                // Delete from Supabase Storage
                 const { error: storageError } = await supabase.storage
                     .from('media')
                     .remove([filePath]);
@@ -459,24 +432,21 @@
                     throw storageError;
                 }
 
-                // Delete from the 'media' table
                 const { error: dbError } = await supabase
                     .from('media')
                     .delete()
-                    .eq('id', id);
+                    .eq('id', id)
+                    .eq('user_id', localUserId); // Crucial for RLS with 'using (true)' on table
 
                 if (dbError) {
                     throw dbError;
                 }
 
-                // Remove the card from the DOM
                 cardElement.remove();
                 showCustomModal('Success', 'Media deleted successfully!', false);
 
-                // If no more media, show the "no media" message
                 if (mediaGallery.children.length === 1 && mediaGallery.firstElementChild.id === 'loading-spinner') {
-                     // Only the spinner is left, meaning no actual media
-                    mediaGallery.innerHTML = ''; // Clear spinner too
+                    mediaGallery.innerHTML = '';
                     noMediaMessage.classList.remove('hidden');
                 }
             } catch (error) {
@@ -490,10 +460,9 @@
          * @param {string} text - The text to copy.
          */
         function copyToClipboard(text) {
-            // Use a temporary textarea to copy text for broader compatibility
             const textarea = document.createElement('textarea');
             textarea.value = text;
-            textarea.style.position = 'fixed'; // Avoid scrolling to bottom
+            textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
             document.body.appendChild(textarea);
             textarea.focus();
