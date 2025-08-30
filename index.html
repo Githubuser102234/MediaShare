@@ -351,14 +351,17 @@
 
                 const publicUrl = publicUrlData.publicUrl;
 
-                const { error: dbError } = await supabase
+                // Insert metadata into the 'media' table and get the inserted ID
+                const { data: insertedData, error: dbError } = await supabase
                     .from('media')
                     .insert({
                         user_id: localUserId,
                         file_path: filePath,
                         file_type: file.type,
                         public_url: publicUrl,
-                    });
+                    })
+                    .select('id') // Request the ID of the newly inserted row
+                    .single();
 
                 if (dbError) {
                     throw dbError;
@@ -368,7 +371,17 @@
                 uploadStatus.textContent = `Upload successful!`;
                 showCustomModal('Success!', `"${file.name}" uploaded successfully!`, false);
                 mediaFileInput.value = '';
-                await fetchMedia();
+
+                // Redirect to the newly uploaded file's page
+                if (insertedData && insertedData.id) {
+                    const newFileId = insertedData.id;
+                    history.pushState(null, '', `?fileid=${newFileId}`);
+                    displaySingleMedia(newFileId);
+                } else {
+                    // Fallback to gallery if ID not retrieved (shouldn't happen with .select('id').single())
+                    fetchMedia();
+                }
+
             } catch (error) {
                 console.error('Error uploading file:', error);
                 uploadStatus.textContent = `Upload failed: ${error.message}`;
@@ -590,7 +603,6 @@
             }
 
             try {
-                // Delete from Supabase Storage
                 const { error: storageError } = await supabase.storage
                     .from('media')
                     .remove([filePath]);
@@ -599,7 +611,6 @@
                     throw storageError;
                 }
 
-                // Delete from the 'media' table
                 const { error: dbError } = await supabase
                     .from('media')
                     .delete()
@@ -615,7 +626,6 @@
                 }
                 showCustomModal('Success', 'Media deleted successfully!', false);
 
-                // Check if after loading, there's still no media for gallery view
                 if (mediaGallery.children.length === 1 && mediaGallery.firstElementChild.id === 'loading-spinner') {
                      mediaGallery.innerHTML = '';
                      noMediaMessage.classList.remove('hidden');
@@ -659,7 +669,8 @@
             const queryString = window.location.search;
             const urlParams = new URLSearchParams(queryString);
             for (const [key, value] of urlParams.entries()) {
-                params[key] = value;
+                // Trim whitespace from the value to prevent UUID parsing errors
+                params[key] = value.trim();
             }
             return params;
         }
@@ -692,8 +703,10 @@
         // Initial load logic
         window.onload = () => {
             const params = parseURLParams();
-            if (params.fileid) {
-                displaySingleMedia(params.fileid);
+            // Ensure fileid is trimmed when accessed
+            const fileid = params.fileid;
+            if (fileid) {
+                displaySingleMedia(fileid);
             } else {
                 fetchMedia();
             }
