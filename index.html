@@ -12,9 +12,18 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Align content to top */
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            box-sizing: border-box; /* Include padding in element's total width and height */
         }
         .container {
             max-width: 1200px;
+            width: 100%;
         }
         .media-grid {
             display: grid;
@@ -30,6 +39,11 @@
             flex-direction: column;
             justify-content: space-between;
             min-height: 280px; /* Ensure cards have a minimum height */
+            cursor: pointer; /* Indicate clickable */
+            transition: transform 0.2s ease-in-out;
+        }
+        .media-card:hover {
+            transform: translateY(-5px);
         }
         .media-content {
             width: 100%;
@@ -49,6 +63,9 @@
             font-weight: 500;
             transition: all 0.2s;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .btn-primary {
             background-color: #4f46e5;
@@ -114,9 +131,30 @@
             gap: 1rem;
             margin-top: 1.5rem;
         }
+        /* Single Media View Styles */
+        #single-media-view {
+            display: none; /* Hidden by default */
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 2rem;
+            margin-top: 2rem;
+            width: 100%;
+            max-width: 800px; /* Larger max-width for single view */
+            text-align: center;
+        }
+        #single-media-content {
+            max-width: 100%;
+            height: auto;
+            max-height: 70vh; /* Limit height for large media */
+            object-fit: contain; /* Ensure entire media is visible */
+            display: block;
+            margin: 0 auto 1.5rem auto;
+            border-radius: 0.5rem;
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center py-8 px-4">
+<body>
     <div class="container mx-auto p-6 bg-white rounded-lg shadow-xl w-full">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-extrabold text-gray-900 mb-2">📸 Supabase Media Share 🎥</h1>
@@ -124,7 +162,7 @@
         </header>
 
         <!-- Upload Section -->
-        <section class="mb-10 p-6 border-2 border-dashed border-indigo-300 rounded-lg bg-indigo-50">
+        <section id="upload-section" class="mb-10 p-6 border-2 border-dashed border-indigo-300 rounded-lg bg-indigo-50">
             <h2 class="text-2xl font-semibold text-indigo-700 mb-4">Upload New Media</h2>
             <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
                 <label for="media-file-input" class="flex-grow flex items-center justify-center px-4 py-2 bg-white text-indigo-600 border border-indigo-300 rounded-md cursor-pointer hover:bg-indigo-50 transition-colors">
@@ -144,7 +182,7 @@
         </section>
 
         <!-- Media Gallery Section -->
-        <section>
+        <section id="media-gallery-section">
             <h2 class="text-2xl font-semibold text-gray-800 mb-6">Shared Media</h2>
             <div id="media-gallery" class="media-grid">
                 <!-- Media cards will be dynamically inserted here -->
@@ -154,6 +192,28 @@
                 </div>
             </div>
             <p id="no-media-message" class="text-center text-gray-500 mt-8 text-lg hidden">No media uploaded yet. Be the first to share! 🎉</p>
+        </section>
+
+        <!-- Single Media View Section -->
+        <section id="single-media-view" class="flex flex-col items-center">
+            <button id="back-to-gallery-btn" class="btn btn-secondary mb-4 self-start">
+                <i class="fas fa-arrow-left mr-2"></i> Back to Gallery
+            </button>
+            <div id="single-media-container" class="w-full text-center">
+                <!-- Single media item will be dynamically inserted here -->
+                <div id="single-media-loading" class="text-center py-8">
+                    <i class="fas fa-spinner fa-spin text-indigo-600 text-3xl"></i>
+                    <p class="mt-2 text-indigo-600">Loading media...</p>
+                </div>
+            </div>
+            <div id="single-media-actions" class="flex justify-center gap-4 mt-6">
+                <button id="single-copy-url-btn" class="btn btn-secondary">
+                    <i class="fas fa-copy mr-2"></i> Copy URL
+                </button>
+                <button id="single-delete-btn" class="btn btn-danger hidden">
+                    <i class="fas fa-trash-alt mr-2"></i> Delete
+                </button>
+            </div>
         </section>
     </div>
 
@@ -179,14 +239,24 @@
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // --- DOM Elements ---
+        const uploadSection = document.getElementById('upload-section');
         const mediaFileInput = document.getElementById('media-file-input');
         const uploadBtn = document.getElementById('upload-btn');
         const uploadProgressBarContainer = document.getElementById('upload-progress-container');
         const uploadProgressBar = document.getElementById('upload-progress-bar');
         const uploadStatus = document.getElementById('upload-status');
+
+        const mediaGallerySection = document.getElementById('media-gallery-section');
         const mediaGallery = document.getElementById('media-gallery');
         const loadingSpinner = document.getElementById('loading-spinner');
         const noMediaMessage = document.getElementById('no-media-message');
+
+        const singleMediaView = document.getElementById('single-media-view');
+        const backToGalleryBtn = document.getElementById('back-to-gallery-btn');
+        const singleMediaContainer = document.getElementById('single-media-container');
+        const singleMediaLoading = document.getElementById('single-media-loading');
+        const singleCopyUrlBtn = document.getElementById('single-copy-url-btn');
+        const singleDeleteBtn = document.getElementById('single-delete-btn');
 
         // Modal elements
         const customModal = document.getElementById('custom-modal');
@@ -317,8 +387,13 @@
          * Fetches and displays all media from the Supabase 'media' table and storage.
          */
         async function fetchMedia() {
+            // Hide single media view, show gallery and upload sections
+            singleMediaView.style.display = 'none';
+            uploadSection.style.display = 'block';
+            mediaGallerySection.style.display = 'block';
+
             loadingSpinner.classList.remove('hidden');
-            mediaGallery.innerHTML = '';
+            mediaGallery.innerHTML = ''; // Clear existing media
 
             try {
                 const { data: mediaData, error } = await supabase
@@ -343,6 +418,12 @@
                     mediaCard.dataset.id = mediaItem.id;
                     mediaCard.dataset.userId = mediaItem.user_id;
 
+                    // Make the entire card clickable to navigate to single file view
+                    mediaCard.onclick = () => {
+                        history.pushState(null, '', `?fileid=${mediaItem.id}`);
+                        displaySingleMedia(mediaItem.id);
+                    };
+
                     let mediaElement;
                     if (mediaItem.file_type.startsWith('image/')) {
                         mediaElement = document.createElement('img');
@@ -356,10 +437,10 @@
                     } else if (mediaItem.file_type.startsWith('video/')) {
                         mediaElement = document.createElement('video');
                         mediaElement.src = mediaItem.public_url;
-                        mediaElement.controls = true;
+                        mediaElement.controls = false; /* Disable controls for thumbnail */
                         mediaElement.autoplay = false;
                         mediaElement.muted = true;
-                        mediaElement.loop = false;
+                        mediaElement.loop = true; /* Loop for gallery preview */
                         mediaElement.classList.add('media-content');
                         mediaElement.onerror = (e) => {
                             e.target.src = `https://placehold.co/200x200/cccccc/ffffff?text=Video+Load+Error`;
@@ -373,25 +454,39 @@
 
                     mediaCard.appendChild(mediaElement);
 
+                    // Display user ID for identification
+                    const userIdDisplay = document.createElement('p');
+                    userIdDisplay.classList.add('text-xs', 'text-gray-500', 'px-4', 'pt-2');
+                    userIdDisplay.textContent = `Uploaded by: ${mediaItem.user_id.substring(0, 8)}...`; // Show truncated ID
+
+                    // Create action buttons (only copy URL here for gallery view)
                     const actionsDiv = document.createElement('div');
-                    actionsDiv.classList.add('media-actions');
+                    actionsDiv.classList.add('media-actions', 'pt-0');
 
                     const copyBtn = document.createElement('button');
                     copyBtn.classList.add('btn', 'btn-secondary', 'text-sm');
-                    copyBtn.innerHTML = '<i class="fas fa-copy mr-1"></i> Copy URL';
+                    copyBtn.innerHTML = '<i class="fas fa-copy mr-1"></i> URL';
                     copyBtn.title = 'Copy public URL';
-                    copyBtn.onclick = () => copyToClipboard(mediaItem.public_url);
+                    // Stop event propagation to prevent card click handler from firing
+                    copyBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        copyToClipboard(mediaItem.public_url);
+                    };
                     actionsDiv.appendChild(copyBtn);
 
+                    // Add delete button only if localUserId matches (client-side verification)
                     if (mediaItem.user_id === localUserId) {
                         const deleteBtn = document.createElement('button');
                         deleteBtn.classList.add('btn', 'btn-danger', 'text-sm');
                         deleteBtn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Delete';
                         deleteBtn.title = 'Delete this media';
-                        deleteBtn.onclick = () => deleteMedia(mediaItem.id, mediaItem.file_path, mediaCard);
+                        deleteBtn.onclick = (e) => {
+                            e.stopPropagation(); // Prevent card click
+                            deleteMedia(mediaItem.id, mediaItem.file_path, mediaCard);
+                        };
                         actionsDiv.appendChild(deleteBtn);
                     }
-
+                    mediaCard.appendChild(userIdDisplay);
                     mediaCard.appendChild(actionsDiv);
                     mediaGallery.appendChild(mediaCard);
                 }
@@ -407,10 +502,81 @@
         }
 
         /**
+         * Displays a single media item based on its ID.
+         * @param {string} fileId - The ID of the media item to display.
+         */
+        async function displaySingleMedia(fileId) {
+            // Hide gallery and upload sections, show single media view
+            uploadSection.style.display = 'none';
+            mediaGallerySection.style.display = 'none';
+            singleMediaView.style.display = 'flex'; // Use flex to center content
+            singleMediaContainer.innerHTML = ''; // Clear previous content
+            singleMediaLoading.classList.remove('hidden');
+            singleCopyUrlBtn.onclick = null;
+            singleDeleteBtn.classList.add('hidden');
+
+            try {
+                const { data: mediaItem, error } = await supabase
+                    .from('media')
+                    .select('*')
+                    .eq('id', fileId)
+                    .single();
+
+                if (error || !mediaItem) {
+                    throw new Error(error ? error.message : 'Media item not found.');
+                }
+
+                let mediaElement;
+                if (mediaItem.file_type.startsWith('image/')) {
+                    mediaElement = document.createElement('img');
+                    mediaElement.src = mediaItem.public_url;
+                    mediaElement.alt = `Shared image`;
+                } else if (mediaItem.file_type.startsWith('video/')) {
+                    mediaElement = document.createElement('video');
+                    mediaElement.src = mediaItem.public_url;
+                    mediaElement.controls = true;
+                    mediaElement.autoplay = false;
+                    mediaElement.muted = false; // Allow sound in single view
+                    mediaElement.loop = false;
+                } else {
+                    mediaElement = document.createElement('div');
+                    mediaElement.textContent = `Unsupported File Type: ${mediaItem.file_type}`;
+                    mediaElement.classList.add('py-10', 'bg-gray-200', 'text-gray-500', 'font-semibold');
+                }
+                mediaElement.id = 'single-media-content'; // Assign ID for styling
+                singleMediaContainer.appendChild(mediaElement);
+
+                // Update copy URL button for single media
+                singleCopyUrlBtn.onclick = () => copyToClipboard(mediaItem.public_url);
+
+                // Show delete button only if localUserId matches (client-side verification)
+                if (mediaItem.user_id === localUserId) {
+                    singleDeleteBtn.classList.remove('hidden');
+                    singleDeleteBtn.onclick = () => {
+                        deleteMedia(mediaItem.id, mediaItem.file_path, null); // Pass null as cardElement since we're in single view
+                        history.pushState(null, '', location.pathname); // Go back to gallery after deletion
+                        fetchMedia();
+                    };
+                } else {
+                    singleDeleteBtn.classList.add('hidden');
+                }
+
+            } catch (error) {
+                console.error('Error fetching single media:', error);
+                showCustomModal('Error', `Could not load media: ${error.message}`, false);
+                // Redirect back to gallery if single media fails to load
+                history.pushState(null, '', location.pathname);
+                fetchMedia();
+            } finally {
+                singleMediaLoading.classList.add('hidden');
+            }
+        }
+
+        /**
          * Deletes a media item from Supabase Storage and the 'media' table.
          * @param {string} id - The ID of the media item in the database.
          * @param {string} filePath - The path to the file in Supabase Storage.
-         * @param {HTMLElement} cardElement - The DOM element of the media card to remove.
+         * @param {HTMLElement | null} cardElement - The DOM element of the media card to remove (optional).
          */
         async function deleteMedia(id, filePath, cardElement) {
             const confirmed = await showCustomModal(
@@ -424,6 +590,7 @@
             }
 
             try {
+                // Delete from Supabase Storage
                 const { error: storageError } = await supabase.storage
                     .from('media')
                     .remove([filePath]);
@@ -432,6 +599,7 @@
                     throw storageError;
                 }
 
+                // Delete from the 'media' table
                 const { error: dbError } = await supabase
                     .from('media')
                     .delete()
@@ -442,13 +610,17 @@
                     throw dbError;
                 }
 
-                cardElement.remove();
+                if (cardElement) {
+                    cardElement.remove(); // Remove the card from the gallery view if present
+                }
                 showCustomModal('Success', 'Media deleted successfully!', false);
 
+                // Check if after loading, there's still no media for gallery view
                 if (mediaGallery.children.length === 1 && mediaGallery.firstElementChild.id === 'loading-spinner') {
-                    mediaGallery.innerHTML = '';
-                    noMediaMessage.classList.remove('hidden');
+                     mediaGallery.innerHTML = '';
+                     noMediaMessage.classList.remove('hidden');
                 }
+
             } catch (error) {
                 console.error('Error deleting media:', error);
                 showCustomModal('Deletion Failed', `Could not delete media: ${error.message}`, false);
@@ -478,6 +650,20 @@
             }
         }
 
+        /**
+         * Parses URL query parameters.
+         * @returns {Object} An object containing key-value pairs of query parameters.
+         */
+        function parseURLParams() {
+            const params = {};
+            const queryString = window.location.search;
+            const urlParams = new URLSearchParams(queryString);
+            for (const [key, value] of urlParams.entries()) {
+                params[key] = value;
+            }
+            return params;
+        }
+
         // --- Event Listeners ---
         uploadBtn.addEventListener('click', uploadFile);
         mediaFileInput.addEventListener('change', () => {
@@ -488,8 +674,30 @@
             }
         });
 
-        // Initial media fetch on page load
-        window.onload = fetchMedia;
+        backToGalleryBtn.addEventListener('click', () => {
+            history.pushState(null, '', location.pathname); // Clear fileid from URL
+            fetchMedia();
+        });
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', () => {
+            const params = parseURLParams();
+            if (params.fileid) {
+                displaySingleMedia(params.fileid);
+            } else {
+                fetchMedia();
+            }
+        });
+
+        // Initial load logic
+        window.onload = () => {
+            const params = parseURLParams();
+            if (params.fileid) {
+                displaySingleMedia(params.fileid);
+            } else {
+                fetchMedia();
+            }
+        };
     </script>
 </body>
 </html>
